@@ -64,7 +64,7 @@ Wazuh Docker Copyright (C) 2017, Wazuh Inc. (License GPLv2)
 
 I have to deploy Wazuh-docker, single node on my sub domain
 
-https://wazuh.qadarparvez.space
+https://www.wazuh.qadarparvez.space
 
 
 ## Generate SSL certificaate
