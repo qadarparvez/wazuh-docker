@@ -62,74 +62,118 @@ Wazuh Docker Copyright (C) 2017, Wazuh Inc. (License GPLv2)
 ################################################################## Note from Qadar ###########################################
 
 
-I have to deploy Wazuh-docker, single node on my sub domain
+To host Wazuh Docker single-node at https://qadar.space with a custom SSL certificate via Let’s Encrypt and use NGINX as a reverse proxy, based on Wazuh’s official documentation, follow the complete step-by-step guide below.
 
-https://www.wazuh.qadarparvez.space
+⸻
 
+🛠️ Prerequisites
 
-## Generate SSL certificaate
+✅ A domain: qadar.space
+✅ A record pointing to your EC2 public IP: 63.35.217.170
+✅ Ports 80 and 443 open in your EC2 Security Group
+✅ Docker and Docker Compose installed
+
+⸻
+
+📦 STEP 1: Clone Wazuh Docker Repository
+
+git clone https://github.com/wazuh/wazuh-docker.git -b v4.7.3
+cd wazuh-docker/single-node
+
+🌐 STEP 2: Set Up SSL Certificate with Let’s Encrypt (Using Certbot)
+
+Use standalone Certbot with Docker:
+
 sudo docker run -it --rm \
   -p 80:80 \
-  --name certbot \
   -v "/etc/letsencrypt:/etc/letsencrypt" \
   -v "/var/lib/letsencrypt:/var/lib/letsencrypt" \
-  certbot/certbot certonly --standalone \
+  certbot/certbot certonly \
+  --standalone \
   --agree-tos \
   --no-eff-email \
-  --email qadarparvez@gmail.com \
-  -d qadarparvez.space
+  --email your-email@example.com \
+  -d qadar.space
 
 
-### Check SSL Cert Location
-After a successful run, your certs will be stored in:
-
-/etc/letsencrypt/live/yourdomain.com/
-
-Files:
-	•	fullchain.pem — your certificate
-	•	privkey.pem — private key
-
-## Run Nginx as Reverse Proxy in Docker with SSL
-
-Let’s set up a reverse proxy container to forward traffic from HTTPS (443) to your Wazuh dashboard container (usually port 5601 internally).
-
-First, create a folder and Nginx config file:
+You will now have your certs at:
 
 
-mkdir -p ~/nginx-wazuh/conf.d
-nano ~/nginx-wazuh/conf.d/default.conf
+📝 STEP 3: Configure NGINX Proxy for SSL
 
-Paste the following (edit with your domain and Wazuh container IP):
+🔸 3.1 Install NGINX (On EC2 Host):
 
-server {
-    listen 443 ssl;
-    server_name qadarparvez.space;
+sudo apt update
+sudo apt install nginx -y
 
-    ssl_certificate /etc/letsencrypt/live/qadarparvez.space/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/qadarparvez.space/privkey.pem;
+🔸 3.2 Create NGINX Config File
 
-    location / {
-        proxy_pass http://wazuh-dashboard>:5601;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+sudo nano /etc/nginx/sites-available/wazuh
+
+
+
+
+Paste this config:
 
 server {
     listen 80;
-    server_name qqadarparvez.space;
+    server_name qadar.space;
     return 301 https://$host$request_uri;
 }
 
+server {
+    listen 443 ssl;
+    server_name qadar.space;
 
-## Now run the Nginx container:
+    ssl_certificate /etc/letsencrypt/live/qadar.space/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/qadar.space/privkey.pem;
 
-sudo docker run -d \
-  --name nginx-ssl \
-   -p 443:443 \
-  -v "/etc/letsencrypt:/etc/letsencrypt:ro" \
-  -v "$HOME/nginx-wazuh/conf.d:/etc/nginx/conf.d:ro" \
-  nginx
+    location / {
+        proxy_pass https://127.0.0.1:5601;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+
+
+🔸 3.3 Enable Config
+
+
+sudo ln -s /etc/nginx/sites-available/wazuh /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+
+🐳 STEP 4: Configure Docker Compose to Bind Dashboard on Localhost
+
+🔸 Edit docker-compose.yml in wazuh-docker/single-node/:
+
+Ensure Wazuh Dashboard exposes port 5601 only to localhost:
+
+dashboard:
+  ports:
+    - "127.0.0.1:5601:5601"
+
+
+
+▶️ STEP 5: Launch Wazuh Single-Node
+
+From inside wazuh-docker/single-node directory:
+
+docker-compose -f generate-indexer-certs.yml run --rm generator
+docker-compose up -d
+
+
+✅ STEP 6: Access Wazuh Dashboard
+
+Visit:
+
+👉 https://qadar.space
+
 
 ## Renewal (Every 90 Days)
 
